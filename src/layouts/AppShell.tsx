@@ -80,6 +80,7 @@ export function AppShell() {
 
   // --- Modal state ---
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<'signIn' | 'signUp'>('signIn');
   const [giveawayModalOpen, setGiveawayModalOpen] = useState(false);
   const [loyaltyModalOpen, setLoyaltyModalOpen] = useState(false);
   const [methodologyModalOpen, setMethodologyModalOpen] = useState(false);
@@ -245,7 +246,8 @@ export function AppShell() {
         selectedMarket={selectedMarket} setSelectedMarket={setSelectedMarket}
         searchQuery={filters.search} setSearchQuery={q => setFilters(prev => ({ ...prev, search: q }))}
         savedFirmsCount={savedFirmIds.length} openSavedModal={() => setSavedModalOpen(true)}
-        userProfile={userProfile} onOpenAuth={() => setAuthModalOpen(true)}
+        userProfile={userProfile} onOpenAuth={() => { setAuthMode('signIn'); setAuthModalOpen(true); }}
+        onOpenSignUp={() => { setAuthMode('signUp'); setAuthModalOpen(true); }}
         onOpenGiveaway={() => setGiveawayModalOpen(true)} onOpenHiring={() => setHiringModalOpen(true)}
         onOpenTutorials={() => setTutorialsModalOpen(true)} onOpenAppLauncher={() => setAppLauncherOpen(true)}
         onOpenLoyaltyModal={() => setLoyaltyModalOpen(true)} onOpenCompareModal={() => setCompareModalOpen(true)}
@@ -343,7 +345,7 @@ export function AppShell() {
       />
 
       {/* === Modals === */}
-      <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} onSuccess={() => {}} />
+      <AuthModal isOpen={authModalOpen} mode={authMode} onClose={() => setAuthModalOpen(false)} />
       <GiveawayModal isOpen={giveawayModalOpen} onClose={() => setGiveawayModalOpen(false)} userProfile={userProfile} onOpenAuth={() => setAuthModalOpen(true)} onEnteredGiveaway={pts => rewardPoints(pts)} />
       <LoyaltyPointsModal isOpen={loyaltyModalOpen} onClose={() => setLoyaltyModalOpen(false)} userProfile={userProfile} onOpenAuth={() => setAuthModalOpen(true)} onPointsUpdated={newTotal => setUserProfile(prev => prev ? { ...prev, loyaltyPoints: newTotal } : null)} />
       <VerificationMethodologyModal isOpen={methodologyModalOpen} onClose={() => setMethodologyModalOpen(false)} />

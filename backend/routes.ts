@@ -1,8 +1,6 @@
 import { Router, type RequestHandler } from 'express';
 import { randomUUID, createHash } from 'node:crypto';
-import { getApps, initializeApp } from 'firebase-admin/app';
-import { getAuth, type DecodedIdToken } from 'firebase-admin/auth';
-import firebaseConfig from '../firebase-applet-config.json';
+import { clerkClient, getAuth } from '@clerk/express';
 import { pool, transaction } from './db';
 
 class HttpError extends Error { constructor(public status: number, message: string) { super(message); } }
@@ -22,11 +20,8 @@ const uuid = (v: unknown) => { const s = text(v, 36); if (!/^[0-9a-f-]{36}$/i.te
 const wrap = (fn: RequestHandler): RequestHandler => (req, res, next) => { Promise.resolve(fn(req, res, next)).catch(next); };
 const paymentMethods = ['Crypto (USDT)','Rise','Wise','Direct Bank Transfer','Deel','PayPal'];
 
-export type VerifyToken = (token: string) => Promise<DecodedIdToken>;
-const verifyToken: VerifyToken = token => {
-  const app = getApps().find(a => a.name === 'postgres-auth') ?? initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID || firebaseConfig.projectId }, 'postgres-auth');
-  return getAuth(app).verifyIdToken(token);
-};
+type AuthenticatedUser = { uid: string; name?: string; email?: string; picture?: string };
+export type VerifyToken = (token: string) => Promise<AuthenticatedUser>;
 
 async function userProfile(id: string) {
   const result = await pool.query(`SELECT id AS uid,display_name AS "displayName",email,photo_url AS "photoURL",loyalty_points AS "loyaltyPoints",created_at AS "createdAt",last_login_at AS "lastLoginAt",to_char(last_daily_claim_date,'YYYY-MM-DD') AS "lastDailyClaimDate",
@@ -46,7 +41,7 @@ async function alerts(id: string) {
   return r.rows;
 }
 
-export function createDataRouter(verify: VerifyToken = verifyToken) {
+export function createDataRouter(verify?: VerifyToken) {
   const router = Router();
   router.get('/health', wrap(async (_req,res) => { await pool.query('SELECT 1'); res.json({status:'ok',database:'postgresql'}); }));
   router.get('/catalog', wrap(async (_req,res) => {
@@ -66,11 +61,24 @@ export function createDataRouter(verify: VerifyToken = verifyToken) {
     res.setHeader('Cache-Control','no-store');
     const header=req.headers.authorization;
     if (!header?.startsWith('Bearer ')) throw new HttpError(401,'Sign in to continue');
-    try { res.locals.user=await verify(header.slice(7)); } catch { throw new HttpError(401,'Your sign-in has expired'); }
+    if (verify) {
+      try { res.locals.user=await verify(header.slice(7)); } catch { throw new HttpError(401,'Your sign-in has expired'); }
+    } else {
+      if (!process.env.CLERK_SECRET_KEY || !process.env.CLERK_PUBLISHABLE_KEY) throw new HttpError(503, 'Sign-in is not configured');
+      const auth = getAuth(req);
+      if (!auth.isAuthenticated || !auth.userId) throw new HttpError(401, 'Your sign-in has expired');
+      res.locals.user = { uid: auth.userId } satisfies AuthenticatedUser;
+    }
     next();
   }));
   router.post('/me/profile',wrap(async (_req,res) => {
-    const u=res.locals.user as DecodedIdToken;
+    const u=res.locals.user as AuthenticatedUser;
+    if (!verify) {
+      const clerkUser = await clerkClient.users.getUser(u.uid);
+      u.name = clerkUser.fullName || clerkUser.firstName || 'Trader';
+      u.email = clerkUser.primaryEmailAddress?.emailAddress || '';
+      u.picture = clerkUser.imageUrl || '';
+    }
     await pool.query(`INSERT INTO users(id,display_name,email,photo_url) VALUES($1,$2,$3,$4) ON CONFLICT(id) DO UPDATE SET display_name=EXCLUDED.display_name,email=EXCLUDED.email,photo_url=EXCLUDED.photo_url,last_login_at=now()`,[u.uid,u.name || 'Trader',u.email || '',u.picture || '']);
     res.json(await userProfile(u.uid));
   }));

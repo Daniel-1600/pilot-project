@@ -1,7 +1,8 @@
-import type { User } from 'firebase/auth';
-import { auth } from './firebase';
 import type { PriceAlert, AffiliateProfile, ReferralActivityItem, AffiliatePayout } from '../types';
-export { auth, loginWithGoogle, logoutUser, logoutFirebase } from './firebase';
+
+type AuthSession = { userId: string; getToken: () => Promise<string | null> };
+let authSession: AuthSession | null = null;
+export function setAuthSession(session: AuthSession | null) { authSession = session; }
 
 export interface UserProfileData {
   uid: string; displayName: string; email: string; photoURL?: string;
@@ -10,9 +11,10 @@ export interface UserProfileData {
 }
 
 export async function apiRequest<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
-  const user = auth.currentUser;
-  if (path.startsWith('/me') && !user) throw new Error('Sign in to save your changes');
-  const token = user ? await user.getIdToken() : null;
+  const session = authSession;
+  if (path.startsWith('/me') && !session) throw new Error('Sign in to save your changes');
+  const token = session ? await session.getToken() : null;
+  if (path.startsWith('/me') && !token) throw new Error('Your sign-in has expired. Please sign in again.');
   const response = await fetch(`/api${path}`, { method, headers: { 'Content-Type':'application/json', ...(token ? {Authorization:`Bearer ${token}`} : {}) }, body: body===undefined?undefined:JSON.stringify(body) });
   if (!response.ok) {
     const error=await response.json().catch(()=>({error:'Request failed'}));
@@ -20,7 +22,7 @@ export async function apiRequest<T>(path: string, method = 'GET', body?: unknown
   }
   return response.json();
 }
-export const syncUserProfile = (_user:User) => apiRequest<UserProfileData>('/me/profile','POST');
+export const syncUserProfile = () => apiRequest<UserProfileData>('/me/profile','POST');
 export const updateUserFavorites = (_uid:string,favoriteFirmIds:string[]) => apiRequest('/me/favorites','PUT',{favoriteFirmIds});
 export async function addReview(userId:string,firmId:string,review:any) {
   return (await apiRequest<{id:string}>('/me/reviews','POST',{...review,firmId})).id;
@@ -37,8 +39,8 @@ function subscribe<T>(path:string,uid:string,onUpdate:(value:T)=>void,onError?:(
   let stopped=false;
   let timer:ReturnType<typeof setTimeout>;
   const refresh=async()=>{
-    if(stopped || auth.currentUser?.uid!==uid)return;
-    try { const value=await apiRequest<T>(path);if(!stopped && auth.currentUser?.uid===uid)onUpdate(value); }
+    if(stopped || authSession?.userId!==uid)return;
+    try { const value=await apiRequest<T>(path);if(!stopped && authSession?.userId===uid)onUpdate(value); }
     catch(error) { if(!stopped)onError?.(error); }
     if(!stopped)timer=setTimeout(refresh,15000);
   };

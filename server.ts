@@ -7,6 +7,7 @@ import { createServer as createViteServer } from 'vite';
 import { migrate, pool } from './backend/db';
 import { createDataRouter } from './backend/routes';
 import { syncCatalog } from './backend/sync';
+import { clerkMiddleware } from '@clerk/express';
 
 dotenv.config();
 
@@ -269,6 +270,7 @@ app.post('/api/ai/firm-intel', async (req: Request, res: Response) => {
 // Server boot: Mount Vite in development or static dist in production
 async function startServer() {
   await migrate();
+  if (process.env.CLERK_SECRET_KEY && process.env.CLERK_PUBLISHABLE_KEY) app.use(clerkMiddleware());
   app.use('/api', createDataRouter());
   if (process.env.CATALOG_SYNC_ENABLED !== 'false') {
     const hours = Number(process.env.CATALOG_SYNC_INTERVAL_HOURS || 8);

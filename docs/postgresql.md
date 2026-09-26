@@ -1,12 +1,12 @@
 # PostgreSQL and PropFirmMap
 
-The app uses PostgreSQL for all application persistence. Firebase Authentication still handles Google/anonymous sign-in; the server verifies Firebase ID tokens before accessing private rows. No browser code connects directly to PostgreSQL or Firestore.
+The app uses PostgreSQL for all application persistence. Clerk handles sign-in; the server verifies Clerk sessions before accessing private rows. No browser code connects directly to PostgreSQL.
 
 Data flow:
 
 ```text
 PropFirmMap public API → server importer → PostgreSQL → /api/catalog → React
-Firebase sign-in → verified bearer token → /api/me/* → PostgreSQL
+Clerk sign-in → verified bearer token → /api/me/* → PostgreSQL
 ```
 
 ## Setup
@@ -14,8 +14,9 @@ Firebase sign-in → verified bearer token → /api/me/* → PostgreSQL
 1. Install dependencies with `bun install`.
 2. Start PostgreSQL with `docker compose up -d` (or `podman compose up -d`).
 3. Copy `.env.example` to `.env` and set `DATABASE_URL`. The example matches the local Compose database on port 55433. Use your own credentials and TLS connection settings for a hosted database.
-4. Run `bun run db:migrate`, then `bun run db:sync`.
-5. Run `bun run dev` and visit http://localhost:3000.
+4. Create a Clerk application, enable the sign-in methods you want (for example Google and email), and set `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_PUBLISHABLE_KEY` (the same publishable key), and server-only `CLERK_SECRET_KEY` in `.env`. Add the deployment domain in the Clerk dashboard before production use. Without these keys, the public catalog still works but sign-in is unavailable.
+5. Run `bun run db:migrate`, then `bun run db:sync`.
+6. Run `bun run dev` and visit http://localhost:3000.
 
 In this workspace an isolated Podman container named `propfirmmatch-postgres` was already created on port 55433 with volume `propfirmmatch-pgdata`. Use that container or Compose, not both on the same port. `podman start propfirmmatch-postgres` restarts it without losing its data.
 
@@ -30,7 +31,7 @@ PropFirmMap requires **no API key**: [documentation](https://propfirmmap.com/api
 | `firm_rules` | Trading and payout rule objects linked to a firm, including source verification dates and rule notes |
 | `offers` | Active deals linked to firms; provider ID, code (nullable for automatic offers), discount, expiry, original payload |
 | `catalog_sync_runs` | Import start/end, success/failure, row counts and error summary |
-| `users` | Firebase UID, profile and server-managed loyalty points |
+| `users` | Clerk user ID, profile and server-managed loyalty points |
 | `favorites` | User–firm join table |
 | `reviews` | User–firm reviews; one review per user per firm; separate from Trustpilot ratings |
 | `giveaway_entries` | One entry per user per giveaway |
@@ -73,11 +74,11 @@ FROM catalog_sync_runs ORDER BY started_at DESC LIMIT 10;
 - Authenticated activity: `POST /api/me/reviews`, `POST /api/me/giveaways`, `GET/POST /api/me/price-alerts`, `PATCH/DELETE /api/me/price-alerts/:id`.
 - Affiliate: `GET/POST/PATCH /api/me/affiliate`, `GET /api/me/affiliate/activities`, `GET/POST /api/me/affiliate/payouts`.
 
-Private routes require `Authorization: Bearer <Firebase ID token>`. User identity comes from the verified token, never a client-submitted user ID. Monetary balances and reward changes are server-managed. Client polling replaces Firestore listeners and stops on unmount/sign-out. There is no public import-trigger endpoint.
+Private routes require `Authorization: Bearer <Clerk session token>`. User identity comes from the verified session, never a client-submitted user ID. Monetary balances and reward changes are server-managed. Client polling stops on unmount/sign-out. There is no public import-trigger endpoint.
 
 ## Existing data and limits
 
-This change does not delete or export the old Firestore database. Existing Firestore user records have **not** been copied; a returning sign-in currently creates a new PostgreSQL profile if none exists. A production cutover with existing users needs an authenticated Firestore export and explicit mapping of legacy firm/plan IDs to provider IDs before traffic is switched. The former Firestore rules/blueprint remain as historical reference and are not used by the running app.
+No existing users need migration. The first Clerk sign-in creates a PostgreSQL profile, and subsequent sign-ins refresh its display name, email and avatar. The former Firestore rules/blueprint remain as historical reference and are not used by the running app.
 
 The provider does not supply this app's community reviews, individual payout proofs, referral commissions or giveaway sponsorships. These must not be treated as imported catalog facts. Payout proofs now show no records. Guest affiliate simulations remain local demo data and cannot write balances. Price-alert preferences are persisted; automated price-change notification delivery and email delivery are not implemented. Withdrawal requests are stored as pending; no money-transfer integration is present.
 

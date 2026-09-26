@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Bell, ChevronDown, Heart, LogOut, Menu, Search, X } from 'lucide-react';
-import { UserProfileData, logoutFirebase } from '../lib/api';
+import type { UserProfileData } from '../lib/api';
+import { useAuth } from '../contexts/AuthContext';
 import type { SubTabType } from './SubTabsBar';
 
 type Tab = 'firms' | 'compare' | 'quiz' | 'calculator' | 'discounts' | 'payouts' | 'affiliates';
@@ -17,6 +18,7 @@ interface NavbarProps {
   openSavedModal: () => void;
   userProfile: UserProfileData | null;
   onOpenAuth: () => void;
+  onOpenSignUp: () => void;
   onOpenGiveaway: () => void;
   onOpenHiring: () => void;
   onOpenTutorials: () => void;
@@ -31,7 +33,7 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({
   activeTab, setActiveTab, activeSubTab, setActiveSubTab, selectedMarket, setSelectedMarket,
-  searchQuery, setSearchQuery, savedFirmsCount, openSavedModal, userProfile, onOpenAuth,
+  searchQuery, setSearchQuery, savedFirmsCount, openSavedModal, userProfile, onOpenAuth, onOpenSignUp,
   onOpenGiveaway, onOpenHiring, onOpenTutorials, onOpenAppLauncher, onOpenLoyaltyModal,
   onOpenCompareModal, onSelectRulesModal, priceAlertsCount = 0, onOpenPriceAlertsModal,
   onOpenGoogleGrounding,
@@ -40,6 +42,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [moreOpen, setMoreOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const { signOut } = useAuth();
 
   const navigate = (tab: Tab, subTab?: SubTabType) => {
     setActiveTab(tab);
@@ -110,9 +113,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button onClick={() => { openSavedModal(); setAccountOpen(false); }} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-[#9a9e9b] hover:bg-[#2b2e2c]"><Heart className="h-4 w-4" /> Saved firms ({savedFirmsCount})</button>
             {onOpenPriceAlertsModal && <button onClick={() => { onOpenPriceAlertsModal(); setAccountOpen(false); }} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-[#9a9e9b] hover:bg-[#2b2e2c]"><Bell className="h-4 w-4" /> Price alerts ({priceAlertsCount})</button>}
             <button onClick={() => { navigate('affiliates'); setAccountOpen(false); }} className="block w-full rounded-md px-3 py-2 text-left text-sm text-[#9a9e9b] hover:bg-[#2b2e2c]">Affiliate portal</button>
-            <button onClick={async () => { setAccountOpen(false); await logoutFirebase(); }} className="flex w-full items-center gap-2 border-t border-[#2b2e2c] px-3 py-2 text-left text-sm text-[#9a9e9b] hover:text-[#f1f3f2]"><LogOut className="h-4 w-4" /> Sign out</button>
+            <button onClick={async () => { setAccountOpen(false); await signOut(); }} className="flex w-full items-center gap-2 border-t border-[#2b2e2c] px-3 py-2 text-left text-sm text-[#9a9e9b] hover:text-[#f1f3f2]"><LogOut className="h-4 w-4" /> Sign out</button>
           </div>}
-        </div> : <div className="hidden items-center gap-1 sm:flex"><button onClick={onOpenAuth} className="px-3 py-2 text-sm text-[#9a9e9b] hover:text-[#f1f3f2]">Log in</button><button onClick={onOpenAuth} className="rounded-lg bg-[#3ecf8e] px-3.5 py-2 text-sm font-medium text-[#171918] hover:bg-[#4ade9b]">Sign up</button></div>}
+        </div> : <div className="hidden items-center gap-1 sm:flex"><button onClick={onOpenAuth} className="px-3 py-2 text-sm text-[#9a9e9b] hover:text-[#f1f3f2]">Log in</button><button onClick={onOpenSignUp} className="rounded-lg bg-[#3ecf8e] px-3.5 py-2 text-sm font-medium text-[#171918] hover:bg-[#4ade9b]">Sign up</button></div>}
         <button onClick={() => setMobileOpen(!mobileOpen)} aria-label={mobileOpen ? 'Close menu' : 'Open menu'} aria-expanded={mobileOpen} className="rounded-lg p-2 text-[#9a9e9b] hover:bg-[#202321] lg:hidden">{mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}</button>
       </div>
     </div>
